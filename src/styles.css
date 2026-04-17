@@ -1,0 +1,770 @@
+:root {
+  color-scheme: light;
+  --bg: #ffffff;
+  --section-light: #eef4fb;
+  --panel: linear-gradient(180deg, #1c1e54 0%, #0d253d 100%);
+  --panel-border: rgba(185, 185, 249, 0.22);
+  --ink: #061b31;
+  --ink-on-dark: #ffffff;
+  --muted: #64748d;
+  --muted-on-dark: rgba(255, 255, 255, 0.76);
+  --accent: #533afd;
+  --accent-bright: #f96bee;
+  --accent-hover: #4434d4;
+  --surface: #ffffff;
+  --surface-soft: rgba(255, 255, 255, 0.08);
+  --surface-soft-strong: rgba(255, 255, 255, 0.14);
+  --border-soft: #e5edf5;
+  --border-accent: #b9b9f9;
+  --paper: #ffffff;
+  --line: #1d1d1f;
+  --shadow:
+    rgba(50, 50, 93, 0.25) 0px 30px 45px -30px,
+    rgba(0, 0, 0, 0.1) 0px 18px 36px -18px;
+  font-family:
+    sohne-var, "SF Pro Display", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-feature-settings: "ss01" 1;
+  color: var(--ink);
+  background: var(--bg);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 1200px;
+  min-height: 100vh;
+  background: var(--bg);
+}
+
+button,
+input {
+  font: inherit;
+}
+
+.app-shell {
+  display: grid;
+  grid-template-columns: 360px minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+.control-panel {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  padding: 28px 24px 40px;
+  background: var(--panel);
+  backdrop-filter: saturate(160%) blur(16px);
+  border-right: 1px solid var(--panel-border);
+  color: var(--ink-on-dark);
+  box-shadow:
+    rgba(3, 3, 39, 0.25) 0px 14px 21px -14px,
+    rgba(0, 0, 0, 0.1) 0px 8px 17px -8px;
+}
+
+.panel-header h1,
+.preview-header h2,
+.worksheet-header h1 {
+  margin: 0;
+  font-weight: 600;
+}
+
+.panel-header h1 {
+  /* font-size: 2.95rem; */
+  line-height: 1.07;
+  letter-spacing: -0.06rem;
+  font-weight: 300;
+}
+
+.panel-copy {
+  color: var(--muted-on-dark);
+  line-height: 1.4;
+  font-size: 1rem;
+  font-weight: 300;
+}
+
+.eyebrow {
+  margin: 0 0 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.75rem;
+  color: var(--accent-bright);
+  font-weight: 400;
+}
+
+.control-group {
+  margin-top: 22px;
+  padding: 18px;
+  border-radius: 6px;
+  background: var(--surface-soft);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.control-group h2 {
+  margin: 0 0 12px;
+  font-size: 1.02rem;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+}
+
+.group-title-row,
+.toggle-row,
+.action-row,
+.preview-header,
+.worksheet-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.grade-grid,
+.segmented {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip,
+.primary-button,
+.secondary-button {
+  border: 1px solid transparent;
+  border-radius: 980px;
+  cursor: pointer;
+  transition:
+    transform 180ms ease,
+    background 180ms ease,
+    border-color 180ms ease;
+}
+
+.chip {
+  padding: 8px 14px;
+  background: transparent;
+  border-color: var(--border-accent);
+  color: var(--ink-on-dark);
+  border-radius: 4px;
+}
+
+.chip.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: transparent;
+}
+
+.chip:hover,
+.primary-button:hover,
+.secondary-button:hover {
+  transform: translateY(-1px);
+}
+
+.chapter-list {
+  display: grid;
+  gap: 10px;
+}
+
+.chapter-card {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(185, 185, 249, 0.18);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.chapter-card.active {
+  border-color: var(--border-accent);
+  background: rgba(83, 58, 253, 0.12);
+}
+
+.chapter-card input {
+  margin-top: 4px;
+}
+
+.chapter-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.chapter-meta small,
+.hint,
+.hint-block,
+.preview-header p {
+  color: inherit;
+  opacity: 0.72;
+}
+
+.two-column {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.metrics-grid label,
+.toggle-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.metrics-grid input {
+  width: 100%;
+  border: 1px solid var(--border-soft);
+  border-radius: 4px;
+  padding: 10px 12px;
+  background: #ffffff;
+  color: var(--ink);
+  box-shadow: rgba(23, 23, 23, 0.06) 0px 3px 6px;
+}
+
+.toggle-row {
+  flex-direction: row;
+  align-items: center;
+}
+
+.primary-button,
+.secondary-button {
+  padding: 10px 16px;
+  border-radius: 4px;
+  font-weight: 400;
+}
+
+.primary-button {
+  background: var(--accent);
+  color: #fff;
+}
+
+.primary-button:hover {
+  background: var(--accent-hover);
+}
+
+.secondary-button {
+  background: transparent;
+  border-color: rgba(185, 185, 249, 0.65);
+  color: var(--ink-on-dark);
+}
+
+.status-card {
+  margin: 0 0 8px;
+  font-weight: 600;
+}
+
+.error-text {
+  margin: 10px 0 0;
+  color: #ff9f0a;
+}
+
+.preview-shell {
+  padding: 40px 32px 64px;
+  background:
+    radial-gradient(
+      circle at 0% 0%,
+      rgba(249, 107, 238, 0.16),
+      transparent 26%
+    ),
+    radial-gradient(
+      circle at 100% 10%,
+      rgba(83, 58, 253, 0.1),
+      transparent 28%
+    ),
+    linear-gradient(180deg, #ffffff 0%, var(--section-light) 100%);
+}
+
+.preview-header {
+  max-width: 1080px;
+  margin: 0 auto 18px;
+  color: var(--ink);
+}
+
+.preview-header h2 {
+  /* font-size: 3rem; */
+  line-height: 1.12;
+  letter-spacing: -0.06rem;
+  font-weight: 300;
+}
+
+.preview-header p {
+  color: var(--muted);
+  opacity: 1;
+}
+
+.page-stack {
+  display: grid;
+  gap: 28px;
+  max-width: 1080px;
+  margin: 0 auto;
+}
+
+.worksheet-page {
+  width: 210mm;
+  min-height: 297mm;
+  padding: 16mm 14mm 14mm;
+  margin: 0 auto;
+  background: var(--paper);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  break-after: page;
+  display: flex;
+  flex-direction: column;
+}
+
+.worksheet-header {
+  margin-bottom: 18px;
+  text-align: center;
+}
+
+.worksheet-header h2 {
+  /* font-size: 2.5rem; */
+  margin-bottom: 10px;
+  line-height: 1.07;
+  letter-spacing: -0.02em;
+}
+
+.worksheet-meta {
+  justify-content: center;
+  font-size: 0.88rem;
+  color: var(--muted);
+  gap: 18px;
+}
+
+.meta-writing {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.meta-line {
+  display: inline-block;
+  border-bottom: 1.5px solid rgba(29, 29, 31, 0.5);
+  height: 0.95em;
+}
+
+.meta-page {
+  flex: auto;
+  min-width: 4.5rem;
+  text-align: center;
+}
+
+.date-line {
+  width: 10em;
+}
+
+.score-line {
+  width: 5em;
+}
+
+.problem-rows {
+  display: grid;
+  gap: var(--problem-row-gap, 18px);
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.problem-row {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  min-height: 0;
+}
+
+.worksheet-page[data-layout="vertical"] .problem-row {
+  grid-template-columns: 10px minmax(0, 1fr);
+  gap: 4px;
+}
+
+.row-index {
+  color: rgba(29, 29, 31, 0.42);
+  font-size: 0.72rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-top: 0.72rem;
+  font-family: "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+.problem-grid {
+  display: grid;
+  gap: var(--problem-row-gap, 18px) var(--problem-col-gap, 16px);
+  align-items: end;
+}
+
+.worksheet-footer {
+  margin-top: 10px;
+  display: flex;
+  justify-content: flex-end;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.problem-card {
+  color: var(--ink);
+  font-family: "SF Mono", "SFMono-Regular", "Menlo", "Roboto Mono", monospace;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.problem-card.horizontal {
+  font-size: var(--problem-font-size, 1.55rem);
+  line-height: var(--problem-line-height, 1.85);
+}
+
+.problem-card.vertical {
+  align-self: end;
+  padding-right: 2rem;
+}
+
+.horizontal-problem {
+  display: grid;
+  grid-template-columns: repeat(7, max-content);
+  align-items: end;
+  justify-content: start;
+  column-gap: 0.18em;
+  min-height: 1.45em;
+}
+
+.problem-expression {
+  display: contents;
+  min-width: 100%;
+}
+
+.expr-cell {
+  text-align: right;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.expr-cell.operator,
+.expr-cell.equal {
+  text-align: center;
+}
+
+.expr-cell.answer {
+  text-align: left;
+}
+
+.inline-answer,
+.answer-chip {
+  color: var(--accent);
+  font-size: 0.88rem;
+  font-family: "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+.filled-answer {
+  color: var(--accent);
+}
+
+.fraction {
+  display: inline-grid;
+  grid-template-rows: auto 1px auto;
+  align-items: center;
+  justify-items: center;
+  vertical-align: middle;
+  min-width: 1.4em;
+  margin: 0 0.04em;
+  line-height: 1;
+}
+
+.fraction-top,
+.fraction-bottom {
+  display: block;
+  padding: 0 0.14em;
+  font-size: 0.72em;
+}
+
+.fraction-line {
+  width: 100%;
+  border-top: 1.5px solid currentColor;
+  transform: translateY(-0.02em);
+}
+
+.vertical-problem {
+  min-width: 7.4ch;
+  display: grid;
+  justify-items: end;
+  gap: 4px;
+  font-size: var(--problem-font-size, 2rem);
+  line-height: var(--problem-line-height, 1.1);
+  align-content: end;
+}
+
+.vertical-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1.2ch minmax(3.8ch, auto);
+  justify-content: end;
+  text-align: right;
+  min-height: 1.2em;
+  align-items: end;
+}
+
+.vertical-row.bottom {
+  gap: 6px;
+}
+
+.vertical-row.result {
+  padding-top: 6px;
+  min-height: 1.3em;
+  gap: 0.3ch;
+}
+
+.vertical-line {
+  width: 60%;
+  border-top: 1px solid var(--line);
+}
+
+.answer-chip {
+  margin-top: 6px;
+}
+
+.blank-slot {
+  display: inline-block;
+  min-width: 2.4ch;
+  min-height: 1em;
+}
+
+.inline-slot {
+  min-width: 3.8ch;
+  vertical-align: baseline;
+}
+
+.result-slot {
+  min-width: 3.2ch;
+}
+
+.inline-answer-fill {
+  display: inline-block;
+  min-width: 3.8ch;
+}
+
+.equals-mark {
+  font-size: 0.9em;
+}
+
+.operator.placeholder {
+  visibility: hidden;
+}
+
+@media (max-width: 1280px) {
+  body {
+    min-width: 0;
+  }
+
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .control-panel {
+    position: static;
+    height: auto;
+  }
+
+  .preview-shell {
+    overflow-x: auto;
+  }
+}
+
+@page {
+  size: A4 portrait;
+  margin: 10mm;
+}
+
+@media print {
+  body {
+    background: #fff;
+  }
+
+  .app-shell {
+    display: block;
+  }
+
+  .control-panel,
+  .preview-header {
+    display: none;
+  }
+
+  .preview-shell {
+    padding: 0;
+    background: #fff;
+  }
+
+  .page-stack {
+    gap: 0;
+  }
+
+  .worksheet-page {
+    width: auto;
+    min-height: 277mm;
+    margin: 0;
+    padding: 0;
+    border-radius: 0;
+    box-shadow: none;
+    box-sizing: border-box;
+  }
+
+  .worksheet-page[data-layout="horizontal"][data-density="compact"] {
+    --problem-font-size: 0.74rem;
+    --problem-line-height: 0.86;
+    --problem-row-gap: 0px;
+    --problem-col-gap: 3px;
+  }
+
+  .worksheet-page[data-layout="horizontal"][data-density="normal"] {
+    --problem-font-size: 1.02rem;
+    --problem-line-height: 1.18;
+    --problem-row-gap: 8px;
+    --problem-col-gap: 12px;
+  }
+
+  .worksheet-page[data-layout="vertical"][data-density="compact"] {
+    --problem-font-size: 0.98rem;
+    --problem-line-height: 0.92;
+    --problem-row-gap: 1px;
+    --problem-col-gap: 6px;
+  }
+
+  .worksheet-page[data-layout="vertical"][data-density="normal"] {
+    --problem-font-size: 1.72rem;
+    --problem-line-height: 1.06;
+    --problem-row-gap: 10px;
+    --problem-col-gap: 12px;
+  }
+
+  .worksheet-header {
+    margin-bottom: 1px;
+  }
+
+  .worksheet-header h1 {
+    font-size: 1.12rem;
+    margin-bottom: 0;
+  }
+
+  .worksheet-meta {
+    font-size: 0.54rem;
+    gap: 6px;
+  }
+
+  .meta-line {
+    height: 0.54em;
+  }
+
+  .score-line {
+    width: 4.8em;
+  }
+
+  .worksheet-meta .meta-writing:first-child .meta-line {
+    width: 8.6em;
+  }
+
+  .problem-row {
+    grid-template-columns: 14px minmax(0, 1fr);
+    gap: 1px;
+  }
+
+  .worksheet-page[data-layout="vertical"] .problem-row {
+    grid-template-columns: 8px minmax(0, 1fr);
+    gap: 1px;
+  }
+
+  .row-index {
+    font-size: 0.42rem;
+    padding-top: 0.18rem;
+  }
+
+  .horizontal-problem {
+    min-height: 0.8em;
+    column-gap: 0.04em;
+  }
+
+  .worksheet-page[data-layout="vertical"][data-density="compact"]
+    .vertical-problem {
+    min-width: 5.6ch;
+    gap: 1px;
+  }
+
+  .problem-card.vertical {
+    padding-right: 2rem;
+  }
+
+  .worksheet-page[data-layout="vertical"][data-density="compact"]
+    .vertical-row {
+    grid-template-columns: 0.9ch minmax(2.6ch, auto);
+    min-height: 0.82em;
+  }
+
+  .worksheet-page[data-layout="vertical"][data-density="compact"]
+    .vertical-row.bottom {
+    gap: 2px;
+  }
+
+  .worksheet-page[data-layout="vertical"][data-density="compact"]
+    .vertical-row.result {
+    padding-top: 1px;
+    min-height: 0.9em;
+    gap: 0.16ch;
+  }
+
+  .worksheet-page[data-layout="vertical"][data-density="compact"]
+    .vertical-line {
+    width: 54%;
+    border-top-width: 1px;
+  }
+
+  .worksheet-page[data-layout="vertical"][data-density="compact"] .result-slot {
+    min-width: 2ch;
+  }
+
+  .worksheet-page[data-layout="vertical"][data-density="compact"] .blank-slot {
+    min-width: 0.9ch;
+    min-height: 0.54em;
+  }
+
+  .inline-slot,
+  .inline-answer-fill {
+    min-width: 1.9ch;
+  }
+
+  .blank-slot {
+    min-width: 1.1ch;
+    min-height: 0.62em;
+  }
+
+  .fraction {
+    min-width: 1em;
+    margin: 0 0.02em;
+  }
+
+  .fraction-top,
+  .fraction-bottom {
+    font-size: 0.62em;
+    padding: 0 0.08em;
+  }
+
+  .fraction-line {
+    border-top-width: 1px;
+  }
+
+  .vertical-row {
+    grid-template-columns: 1ch minmax(3.1ch, auto);
+  }
+
+  .vertical-line {
+    border-top-width: 1.5px;
+  }
+
+  .worksheet-footer {
+    margin-top: 0;
+    font-size: 0.48rem;
+  }
+}

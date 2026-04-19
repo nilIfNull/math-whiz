@@ -17,3 +17,10 @@
 ## 支持年级
 
 学龄前、一年级、二年级、三年级、四年级、五年级、六年级
+
+<details>
+<summary>Screenshot</summary>
+
+![main](docs/screenshot/main.png)![servers](docs/screenshot/print.png)
+
+</details>

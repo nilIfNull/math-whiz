@@ -35,6 +35,8 @@ export interface GradeDefinition {
 export interface WorksheetConfig {
   grade: GradeValue;
   chapterIds: number[];
+  difficultyFactor: number;
+  allowRemainderDivision: boolean;
   layoutMode: LayoutMode;
   answerMode: AnswerMode;
   totalCount: number;
@@ -48,6 +50,7 @@ export interface StandardProblem {
   id: string;
   chapterId: number;
   chapterLabel: string;
+  difficultyScore?: number;
   layoutMode: LayoutMode;
   answerMode: AnswerMode;
   expression: string;

@@ -14,6 +14,19 @@ import type {
 import { Random } from "./random";
 
 type Fraction = { numerator: number; denominator: number };
+type MultiplicationProfile = {
+  carryCount: number;
+  highestCarryPlace: number;
+};
+type DivisionProfile = {
+  quotient: number;
+  remainder: number;
+  quotientDigits: number;
+  divisorDigits: number;
+  hasInnerZero: boolean;
+  hasTrailingZero: boolean;
+  trialSteps: number;
+};
 
 const OP_SYMBOL: Record<string, string> = {
   "+": "+",
@@ -64,31 +77,115 @@ const formatDecimal = (value: number) => {
   return Number(value.toFixed(4)).toString();
 };
 
-const hasCarry = (a: number, b: number) => {
+const highestCarryPlace = (a: number, b: number) => {
   const digitsA = String(Math.abs(a)).split("").reverse();
   const digitsB = String(Math.abs(b)).split("").reverse();
   const max = Math.max(digitsA.length, digitsB.length);
+  let highest = -1;
   for (let index = 0; index < max; index += 1) {
     const digitA = Number(digitsA[index] ?? "0");
     const digitB = Number(digitsB[index] ?? "0");
     if (digitA + digitB >= 10) {
-      return true;
+      highest = index;
     }
   }
-  return false;
+  return highest;
 };
 
-const hasBorrow = (a: number, b: number) => {
+const hasCarry = (a: number, b: number) => highestCarryPlace(a, b) >= 0;
+
+const highestBorrowPlace = (a: number, b: number) => {
   const digitsA = String(Math.abs(a)).split("").reverse();
   const digitsB = String(Math.abs(b)).split("").reverse();
+  let highest = -1;
+  let borrow = 0;
+
   for (let index = 0; index < digitsA.length; index += 1) {
-    const digitA = Number(digitsA[index] ?? "0");
+    const digitA = Number(digitsA[index] ?? "0") - borrow;
     const digitB = Number(digitsB[index] ?? "0");
     if (digitA < digitB) {
-      return true;
+      highest = index;
+      borrow = 1;
+    } else {
+      borrow = 0;
     }
   }
-  return false;
+
+  return highest;
+};
+
+const hasBorrow = (a: number, b: number) => highestBorrowPlace(a, b) >= 0;
+
+const digitCount = (value: number) =>
+  String(Math.abs(Math.trunc(value))).length;
+
+const multiplicationProfileOf = (
+  left: number,
+  right: number,
+): MultiplicationProfile => {
+  const digitsA = String(Math.abs(left)).split("").reverse().map(Number);
+  const digitsB = String(Math.abs(right)).split("").reverse().map(Number);
+  let carryCount = 0;
+  let highestCarryPlace = -1;
+
+  for (let j = 0; j < digitsB.length; j += 1) {
+    let carry = 0;
+    for (let i = 0; i < digitsA.length; i += 1) {
+      const value = digitsA[i] * digitsB[j] + carry;
+      if (value >= 10) {
+        carryCount += 1;
+        highestCarryPlace = Math.max(highestCarryPlace, i + j + 1);
+      }
+      carry = Math.floor(value / 10);
+    }
+  }
+
+  return { carryCount, highestCarryPlace };
+};
+
+const divisionProfileOf = (
+  dividend: number,
+  divisor: number,
+): DivisionProfile => {
+  const digits = String(Math.abs(Math.trunc(dividend)))
+    .split("")
+    .map(Number);
+  let remainder = 0;
+  let started = false;
+  const quotientDigits: number[] = [];
+
+  for (const digit of digits) {
+    const partial = remainder * 10 + digit;
+    if (started || partial >= divisor) {
+      const quotientDigit = Math.floor(partial / divisor);
+      quotientDigits.push(quotientDigit);
+      remainder = partial - quotientDigit * divisor;
+      started = true;
+      continue;
+    }
+    remainder = partial;
+  }
+
+  if (quotientDigits.length === 0) {
+    quotientDigits.push(0);
+  }
+
+  const quotientText = quotientDigits.join("");
+  const quotient = Number.parseInt(quotientText, 10) || 0;
+  const hasTrailingZero =
+    quotientDigits.length > 1 &&
+    quotientDigits[quotientDigits.length - 1] === 0;
+  const hasInnerZero = quotientDigits.slice(0, -1).includes(0);
+
+  return {
+    quotient,
+    remainder,
+    quotientDigits: digitCount(quotient),
+    divisorDigits: digitCount(divisor),
+    hasInnerZero,
+    hasTrailingZero,
+    trialSteps: quotientDigits.length,
+  };
 };
 
 const selectBlankTarget = (
@@ -258,6 +355,348 @@ const getNumericRangeValue = (value: number | undefined, fallback: number) =>
 const isMultipleOfTen = (value: number) => value % 10 === 0;
 const isMultipleOfHundred = (value: number) => value % 100 === 0;
 
+const numericOptionsFor = (chapter: ChapterDefinition) =>
+  (chapter.options ?? {}) as NumericRuleOptions;
+
+const operatorSymbolsFrom = (expression: string) =>
+  Array.from(expression.matchAll(/[+\-−×÷*/]/g), (match) => match[0]);
+
+const chapterDifficultyWeight = (chapter: ChapterDefinition) => {
+  const base = chapter.order * 1.5;
+  const options = chapter.options ?? {};
+  if ("enforceBorrow" in options && options.enforceBorrow) {
+    return base + 3;
+  }
+  if ("enforceCarry" in options && options.enforceCarry) {
+    return base + 2;
+  }
+  if ("forbidBorrow" in options && options.forbidBorrow) {
+    return base + 1.2;
+  }
+  if ("forbidCarry" in options && options.forbidCarry) {
+    return base + 0.8;
+  }
+  return base;
+};
+
+const estimateProblemDifficulty = (
+  chapter: ChapterDefinition,
+  problem: StandardProblem,
+) => {
+  let score = chapterDifficultyWeight(chapter);
+  const options = chapter.options ?? {};
+  const operators =
+    problem.operator === "=" || !problem.operator
+      ? operatorSymbolsFrom(problem.left ?? problem.expression)
+      : [problem.operator];
+  const normalizedOperators = operators.map((item) =>
+    item === "-" ? "−" : item === "*" ? "×" : item === "/" ? "÷" : item,
+  );
+
+  if (normalizedOperators.length === 1) {
+    const operator = normalizedOperators[0];
+    const leftValue = Number(problem.left ?? "0");
+    const rightValue = Number(problem.right ?? "0");
+    if (operator === "−") score += 1;
+    if (operator === "×") score += 1.4;
+    if (operator === "÷") score += 1.8;
+    if ("enforceCarry" in options && options.enforceCarry && operator === "+") {
+      score += 1.2;
+    }
+    if (
+      "enforceBorrow" in options &&
+      options.enforceBorrow &&
+      operator === "−"
+    ) {
+      score += 2;
+    }
+    if (
+      operator === "+" &&
+      Number.isFinite(leftValue) &&
+      Number.isFinite(rightValue)
+    ) {
+      score += transferPlaceWeight(highestCarryPlace(leftValue, rightValue));
+    }
+    if (
+      operator === "−" &&
+      Number.isFinite(leftValue) &&
+      Number.isFinite(rightValue)
+    ) {
+      score +=
+        transferPlaceWeight(highestBorrowPlace(leftValue, rightValue)) * 1.15;
+    }
+    if (
+      operator === "×" &&
+      Number.isFinite(leftValue) &&
+      Number.isFinite(rightValue)
+    ) {
+      const profile = multiplicationProfileOf(leftValue, rightValue);
+      score += profile.carryCount * 1.1;
+      score += transferPlaceWeight(profile.highestCarryPlace) * 0.8;
+    }
+    if (
+      operator === "÷" &&
+      Number.isFinite(leftValue) &&
+      Number.isFinite(rightValue)
+    ) {
+      const profile = divisionProfileOf(leftValue, rightValue);
+      score += Math.max(0, profile.quotientDigits - 1) * 0.8;
+      score += Math.max(0, profile.divisorDigits - 1) * 1.3;
+      score += Math.max(0, profile.trialSteps - 1) * 0.45;
+      if (profile.remainder > 0) score += 0.6;
+      if (profile.hasInnerZero) score += 2.1;
+      if (profile.hasTrailingZero) score += 1.4;
+    }
+  } else if (normalizedOperators.length > 1) {
+    const plusCount = normalizedOperators.filter((item) => item === "+").length;
+    const minusCount = normalizedOperators.filter(
+      (item) => item === "−",
+    ).length;
+    const mixedAddSub = plusCount > 0 && minusCount > 0;
+    const hasMulDiv = normalizedOperators.some(
+      (item) => item === "×" || item === "÷",
+    );
+
+    if (mixedAddSub) {
+      score += 4.2;
+    } else if (minusCount > 0) {
+      score += 3.2;
+    } else if (plusCount > 0) {
+      score += 2.2;
+    }
+
+    if (hasMulDiv) {
+      score += 2.6;
+    }
+
+    if ("allowParentheses" in options && options.allowParentheses) {
+      score += 1;
+    }
+  }
+
+  const numericOptions = numericOptionsFor(chapter);
+  const magnitude = Math.max(
+    getNumericRangeValue(numericOptions.maxA, 0),
+    getNumericRangeValue(numericOptions.maxB, 0),
+  );
+  if (magnitude >= 1000) score += 2;
+  else if (magnitude >= 100) score += 1;
+  else if (magnitude >= 20) score += 0.4;
+
+  return score;
+};
+
+const quantileValue = (values: number[], ratio: number) => {
+  if (values.length === 0) {
+    return 0;
+  }
+  const index = Math.min(
+    values.length - 1,
+    Math.max(0, Math.floor((values.length - 1) * ratio)),
+  );
+  return values[index];
+};
+
+const difficultyRatio = (factor: number) =>
+  Math.min(Math.max(factor, 0), 100) / 100;
+
+const transferPlaceWeight = (place: number) => {
+  if (place <= 0) return 0;
+  if (place === 1) return 0.9;
+  return 0.9 + (place - 1) * 0.75;
+};
+
+const allowTransferByDifficulty = (
+  random: Random,
+  difficultyFactor: number,
+  transferType: "carry" | "borrow",
+  place: number,
+) => {
+  const ratio = difficultyRatio(difficultyFactor);
+  if (ratio <= 0.2) {
+    if (place >= 1) {
+      return random.next() < 0.005;
+    }
+    return random.next() < (transferType === "carry" ? 0.06 : 0.04);
+  }
+  if (ratio <= 0.35) {
+    if (place >= 2) {
+      return random.next() < 0.02;
+    }
+    if (place === 1) {
+      return random.next() < (transferType === "carry" ? 0.12 : 0.1);
+    }
+  }
+  const placePenalty = Math.min(0.55, transferPlaceWeight(place) * 0.18);
+  const baseRate = transferType === "carry" ? 0.08 : 0.06;
+  const scale = transferType === "carry" ? 0.72 : 0.8;
+  return (
+    random.next() < Math.max(0.01, baseRate + ratio * scale - placePenalty)
+  );
+};
+
+const allowMultiplicationByDifficulty = (
+  random: Random,
+  difficultyFactor: number,
+  profile: MultiplicationProfile,
+) => {
+  const ratio = difficultyRatio(difficultyFactor);
+  if (profile.carryCount === 0) {
+    if (ratio <= 0.1) {
+      return profile.highestCarryPlace <= 0;
+    }
+    return true;
+  }
+  if (ratio <= 0.15) {
+    return false;
+  }
+  if (ratio <= 0.2) {
+    if (profile.highestCarryPlace >= 1) {
+      return false;
+    }
+    return random.next() < 0.1;
+  }
+  if (ratio <= 0.3) {
+    if (profile.carryCount >= 2 || profile.highestCarryPlace >= 1) {
+      return false;
+    }
+    return random.next() < 0.18;
+  }
+  if (ratio <= 0.45) {
+    if (profile.carryCount >= 3) {
+      return false;
+    }
+    if (profile.highestCarryPlace >= 2) {
+      return random.next() < 0.05;
+    }
+    return (
+      random.next() < Math.max(0.1, 0.22 - (profile.carryCount - 1) * 0.06)
+    );
+  }
+  const score =
+    0.14 +
+    ratio * 0.7 -
+    profile.carryCount * 0.12 -
+    transferPlaceWeight(profile.highestCarryPlace) * 0.08;
+  return random.next() < Math.max(0.04, Math.min(0.92, score));
+};
+
+const allowDivisionByDifficulty = (
+  random: Random,
+  difficultyFactor: number,
+  profile: DivisionProfile,
+) => {
+  const ratio = difficultyRatio(difficultyFactor);
+  if (ratio <= 0.1) {
+    if (
+      profile.divisorDigits > 1 ||
+      profile.remainder > 0 ||
+      profile.hasInnerZero ||
+      profile.hasTrailingZero ||
+      profile.quotientDigits > 1
+    ) {
+      return false;
+    }
+    return true;
+  }
+  if (ratio <= 0.2) {
+    if (
+      profile.divisorDigits > 1 ||
+      profile.remainder > 0 ||
+      profile.hasInnerZero ||
+      profile.hasTrailingZero
+    ) {
+      return false;
+    }
+    if (profile.quotientDigits > 1) {
+      return random.next() < 0.08;
+    }
+    return true;
+  }
+  if (ratio <= 0.3) {
+    if (profile.hasInnerZero || profile.hasTrailingZero) {
+      return false;
+    }
+    if (profile.divisorDigits > 1) {
+      return false;
+    }
+    if (profile.remainder > 0) {
+      return random.next() < 0.18;
+    }
+    if (profile.quotientDigits > 1) {
+      return random.next() < 0.18;
+    }
+    return true;
+  }
+  if (ratio <= 0.45) {
+    if (profile.hasInnerZero || profile.hasTrailingZero) {
+      return random.next() < 0.04;
+    }
+    if (profile.divisorDigits > 1 || profile.remainder > 0) {
+      return random.next() < 0.08;
+    }
+    if (profile.quotientDigits > 1) {
+      return random.next() < 0.22;
+    }
+    return true;
+  }
+  const penalty =
+    Math.max(0, profile.divisorDigits - 1) * 0.18 +
+    Math.max(0, profile.quotientDigits - 1) * 0.09 +
+    (profile.remainder > 0 ? 0.12 : 0) +
+    (profile.hasInnerZero ? 0.22 : 0) +
+    (profile.hasTrailingZero ? 0.16 : 0);
+  return (
+    random.next() < Math.max(0.04, Math.min(0.94, 0.2 + ratio * 0.82 - penalty))
+  );
+};
+
+const shouldGenerateRemainder = (
+  random: Random,
+  difficultyFactor: number,
+) => {
+  const ratio = difficultyRatio(difficultyFactor);
+  if (ratio <= 0.2) return false;
+  if (ratio <= 0.3) return random.next() < 0.05;
+  if (ratio <= 0.45) return random.next() < 0.08;
+  if (ratio <= 0.7) return random.next() < 0.12;
+  return random.next() < 0.18;
+};
+
+const targetRemainderRatio = (difficultyFactor: number) => {
+  const ratio = difficultyRatio(difficultyFactor);
+  if (ratio <= 0.2) return 0;
+  if (ratio <= 0.3) return 0.06;
+  if (ratio <= 0.45) return 0.1;
+  if (ratio <= 0.7) return 0.14;
+  return 0.2;
+};
+
+const isRemainderDivisionProblem = (problem: StandardProblem) =>
+  problem.operator === "÷" && problem.answer.includes("余");
+
+const matchesDifficulty = (
+  score: number,
+  sortedScores: number[],
+  difficultyFactor: number,
+) => {
+  if (sortedScores.length < 3) {
+    return true;
+  }
+
+  const center = difficultyRatio(difficultyFactor);
+  const window = 0.34;
+  const minScore = quantileValue(
+    sortedScores,
+    Math.max(0, center - window / 2),
+  );
+  const maxScore = quantileValue(
+    sortedScores,
+    Math.min(1, center + window / 2),
+  );
+  return score >= minScore && score <= maxScore;
+};
+
 const integerCandidate = (random: Random, options: NumericRuleOptions) => {
   const a = random.int(
     getNumericRangeValue(options.minA, 0),
@@ -278,25 +717,14 @@ const applyIntegerOperator = (a: number, b: number, operator: string) => {
   return NaN;
 };
 
-const numberToFactorPair = (
-  random: Random,
-  quotientMin: number,
-  quotientMax: number,
-  divisorMin: number,
-  divisorMax: number,
-) => {
-  const quotient = random.int(quotientMin, quotientMax);
-  const divisor = random.int(divisorMin, divisorMax);
-  return { dividend: quotient * divisor, divisor, quotient };
-};
-
 const generateAddSub = (
   random: Random,
   chapter: ChapterDefinition,
   layoutMode: LayoutMode,
   answerMode: AnswerMode,
+  difficultyFactor: number,
 ) => {
-  const options = (chapter.options ?? {}) as NumericRuleOptions;
+  const options = numericOptionsFor(chapter);
   const operators = [
     ...(options.allowAdd ? ["+"] : []),
     ...(options.allowSub ? ["-"] : []),
@@ -319,6 +747,8 @@ const generateAddSub = (
     }
 
     const result = applyIntegerOperator(a, b, operator);
+    const carryPlace = operator === "+" ? highestCarryPlace(a, b) : -1;
+    const borrowPlace = operator === "-" ? highestBorrowPlace(a, b) : -1;
     if (!Number.isInteger(result)) continue;
     if (operator === "-" && result < 0) continue;
     if (options.maxResult !== undefined && result > options.maxResult) continue;
@@ -326,6 +756,29 @@ const generateAddSub = (
     if (options.forbidCarry && operator === "+" && hasCarry(a, b)) continue;
     if (options.enforceBorrow && operator === "-" && !hasBorrow(a, b)) continue;
     if (options.forbidBorrow && operator === "-" && hasBorrow(a, b)) continue;
+    if (
+      operator === "+" &&
+      !options.enforceCarry &&
+      !options.forbidCarry &&
+      carryPlace >= 0 &&
+      !allowTransferByDifficulty(random, difficultyFactor, "carry", carryPlace)
+    ) {
+      continue;
+    }
+    if (
+      operator === "-" &&
+      !options.enforceBorrow &&
+      !options.forbidBorrow &&
+      borrowPlace >= 0 &&
+      !allowTransferByDifficulty(
+        random,
+        difficultyFactor,
+        "borrow",
+        borrowPlace,
+      )
+    ) {
+      continue;
+    }
     if (
       chapter.value === 205 &&
       (!isMultipleOfTen(a) || !isMultipleOfTen(b) || !isMultipleOfTen(result))
@@ -385,8 +838,9 @@ const generateDecimalAddSub = (
   chapter: ChapterDefinition,
   layoutMode: LayoutMode,
   answerMode: AnswerMode,
+  difficultyFactor: number,
 ) => {
-  const options = (chapter.options ?? {}) as NumericRuleOptions;
+  const options = numericOptionsFor(chapter);
   const decimalPlaces = options.decimalPlaces ?? 1;
   const operators = [
     ...(options.allowAdd ? ["+"] : []),
@@ -414,6 +868,15 @@ const generateDecimalAddSub = (
       continue;
     if (options.forbidCarry && operator === "+" && aDigit + bDigit >= 10)
       continue;
+    if (
+      operator === "+" &&
+      !options.enforceCarry &&
+      !options.forbidCarry &&
+      aDigit + bDigit >= 10 &&
+      !allowTransferByDifficulty(random, difficultyFactor, "carry", 0)
+    ) {
+      continue;
+    }
     if (options.enforceBorrow && operator === "-" && aDigit < bDigit) {
       return createProblem({
         chapter,
@@ -427,6 +890,15 @@ const generateDecimalAddSub = (
       });
     }
     if (options.forbidBorrow && operator === "-" && aDigit < bDigit) continue;
+    if (
+      operator === "-" &&
+      !options.enforceBorrow &&
+      !options.forbidBorrow &&
+      aDigit < bDigit &&
+      !allowTransferByDifficulty(random, difficultyFactor, "borrow", 0)
+    ) {
+      continue;
+    }
     if (decimalPlacesOf(result) > decimalPlaces) continue;
 
     return createProblem({
@@ -458,8 +930,10 @@ const generateMulDiv = (
   chapter: ChapterDefinition,
   layoutMode: LayoutMode,
   answerMode: AnswerMode,
+  difficultyFactor: number,
+  allowRemainderDivision: boolean,
 ) => {
-  const options = (chapter.options ?? {}) as NumericRuleOptions;
+  const options = numericOptionsFor(chapter);
   const operators = [
     ...(options.allowMul ? ["*"] : []),
     ...(options.allowDiv ? ["/"] : []),
@@ -476,6 +950,15 @@ const generateMulDiv = (
         getNumericRangeValue(options.minB, 1),
         getNumericRangeValue(options.maxB, 9),
       );
+      if (
+        !allowMultiplicationByDifficulty(
+          random,
+          difficultyFactor,
+          multiplicationProfileOf(a, b),
+        )
+      ) {
+        continue;
+      }
       return createProblem({
         chapter,
         left: String(a),
@@ -488,31 +971,40 @@ const generateMulDiv = (
       });
     }
 
-    const divisorMin = getNumericRangeValue(options.minB, 1);
-    const divisorMax = getNumericRangeValue(options.maxB, 9);
+    const divisor = random.int(
+      getNumericRangeValue(options.minB, 1),
+      getNumericRangeValue(options.maxB, 9),
+    );
     const quotientMin = 1;
     const quotientMax = Math.max(
       2,
-      Math.floor(getNumericRangeValue(options.maxA, 99) / divisorMin),
+      Math.floor(getNumericRangeValue(options.maxA, 99) / Math.max(1, divisor)),
     );
-    const { dividend, divisor, quotient } = numberToFactorPair(
-      random,
-      quotientMin,
-      Math.min(quotientMax, 999),
-      divisorMin,
-      divisorMax,
-    );
+    const quotient = random.int(quotientMin, Math.min(quotientMax, 999));
+    const allowRemainder = Boolean(options.allowDiv) && allowRemainderDivision;
+    const remainder = allowRemainder
+      ? shouldGenerateRemainder(random, difficultyFactor)
+        ? random.int(1, Math.max(1, divisor - 1))
+        : 0
+      : 0;
+    const dividend = quotient * divisor + remainder;
     if (
       dividend < getNumericRangeValue(options.minA, 1) ||
       dividend > getNumericRangeValue(options.maxA, 9999)
     )
       continue;
+    const profile = divisionProfileOf(dividend, divisor);
+    if (!allowRemainder && profile.remainder > 0) continue;
+    if (!allowDivisionByDifficulty(random, difficultyFactor, profile)) continue;
     return createProblem({
       chapter,
       left: String(dividend),
       operator,
       right: String(divisor),
-      result: String(quotient),
+      result:
+        profile.remainder > 0
+          ? `${profile.quotient}余${profile.remainder}`
+          : String(profile.quotient),
       layoutMode,
       answerMode,
       random,
@@ -587,7 +1079,7 @@ const generateMixedInteger = (
   layoutMode: LayoutMode,
   answerMode: AnswerMode,
 ) => {
-  const options = (chapter.options ?? {}) as NumericRuleOptions;
+  const options = numericOptionsFor(chapter);
   const operators = integerOperators(options);
   const steps = options.steps ?? 2;
   const useParentheses = Boolean(
@@ -853,7 +1345,7 @@ const generateDecimalMulDiv = (
   layoutMode: LayoutMode,
   answerMode: AnswerMode,
 ) => {
-  const options = (chapter.options ?? {}) as NumericRuleOptions;
+  const options = numericOptionsFor(chapter);
   const operator = random.pick([
     ...(options.allowMul ? ["*"] : []),
     ...(options.allowDiv ? ["/"] : []),
@@ -924,7 +1416,7 @@ const generateDecimalMixed = (
   layoutMode: LayoutMode,
   answerMode: AnswerMode,
 ) => {
-  const options = (chapter.options ?? {}) as NumericRuleOptions;
+  const options = numericOptionsFor(chapter);
   const ops = integerOperators(options);
   for (let attempts = 0; attempts < 1000; attempts += 1) {
     const values = Array.from({ length: 3 }, () =>
@@ -1037,16 +1529,37 @@ const generateFromChapter = (
   random: Random,
   layoutMode: LayoutMode,
   answerMode: AnswerMode,
+  difficultyFactor: number,
+  allowRemainderDivision: boolean,
 ) => {
   switch (chapter.ruleKind) {
     case "add-sub":
-      return generateAddSub(random, chapter, layoutMode, answerMode);
+      return generateAddSub(
+        random,
+        chapter,
+        layoutMode,
+        answerMode,
+        difficultyFactor,
+      );
     case "mul-div":
-      return generateMulDiv(random, chapter, layoutMode, answerMode);
+      return generateMulDiv(
+        random,
+        chapter,
+        layoutMode,
+        answerMode,
+        difficultyFactor,
+        allowRemainderDivision,
+      );
     case "mixed-integer":
       return generateMixedInteger(random, chapter, layoutMode, answerMode);
     case "decimal-add-sub":
-      return generateDecimalAddSub(random, chapter, layoutMode, answerMode);
+      return generateDecimalAddSub(
+        random,
+        chapter,
+        layoutMode,
+        answerMode,
+        difficultyFactor,
+      );
     case "decimal-mul-div":
       return generateDecimalMulDiv(random, chapter, layoutMode, answerMode);
     case "decimal-mixed":
@@ -1065,7 +1578,13 @@ const generateFromChapter = (
     case "fraction-mixed":
       return generateFractionMixed(random, chapter, layoutMode, answerMode);
     default:
-      return generateAddSub(random, chapter, layoutMode, answerMode);
+      return generateAddSub(
+        random,
+        chapter,
+        layoutMode,
+        answerMode,
+        difficultyFactor,
+      );
   }
 };
 
@@ -1090,9 +1609,161 @@ const chapterPoolFor = (chapter: ChapterDefinition) => {
     return [chapter];
   }
   const gradeChapters = chaptersForGrade(chapter.grade);
-  return gradeChapters.filter(
+  const pool = gradeChapters.filter(
     (item) => item.order <= (chapter.mixUntilOrder ?? chapter.order - 1),
   );
+  return pool;
+};
+
+const chapterPoolForDifficulty = (
+  chapter: ChapterDefinition,
+  difficultyFactor: number,
+) => {
+  const pool = chapterPoolFor(chapter);
+  if (pool.length <= 2 || chapter.label !== "综合练习") {
+    return pool;
+  }
+  const ratio = difficultyRatio(difficultyFactor);
+  const windowSize = Math.max(2, Math.ceil(pool.length * 0.6));
+  const maxStart = Math.max(0, pool.length - windowSize);
+  const start = Math.round(maxStart * ratio);
+  return pool.slice(start, start + windowSize);
+};
+
+const sampleDifficultyScores = (
+  config: WorksheetConfig,
+  selectedChapters: ChapterDefinition[],
+) => {
+  const random = new Random(config.seed + 97);
+  const scores: number[] = [];
+
+  for (
+    let attempts = 0;
+    attempts < Math.max(36, config.totalCount);
+    attempts += 1
+  ) {
+    const selected = random.pick(selectedChapters);
+    const chapter = random.pick(chapterPoolFor(selected));
+    const problem = generateFromChapter(
+      chapter,
+      random,
+      config.layoutMode,
+      config.answerMode,
+      config.difficultyFactor,
+      config.allowRemainderDivision,
+    );
+    scores.push(estimateProblemDifficulty(chapter, problem));
+  }
+
+  return scores.sort((left, right) => left - right);
+};
+
+const withDifficultyScore = (
+  chapter: ChapterDefinition,
+  problem: StandardProblem,
+): StandardProblem => ({
+  ...problem,
+  difficultyScore: Number(
+    estimateProblemDifficulty(chapter, problem).toFixed(1),
+  ),
+});
+
+const rebalanceRemainderDivisionProblems = (
+  problems: StandardProblem[],
+  config: WorksheetConfig,
+  random: Random,
+) => {
+  if (!config.allowRemainderDivision) {
+    return problems;
+  }
+
+  const divisionIndexes = problems
+    .map((problem, index) => ({ problem, index }))
+    .filter(({ problem }) => problem.operator === "÷");
+  const remainderIndexes = divisionIndexes
+    .filter(({ problem }) => isRemainderDivisionProblem(problem))
+    .map(({ index }) => index);
+
+  if (divisionIndexes.length === 0 || remainderIndexes.length === 0) {
+    return problems;
+  }
+
+  const allowedRemainders = Math.floor(
+    divisionIndexes.length * targetRemainderRatio(config.difficultyFactor),
+  );
+  if (remainderIndexes.length <= allowedRemainders) {
+    return problems;
+  }
+
+  const nextProblems = [...problems];
+  for (const problemIndex of remainderIndexes.slice(allowedRemainders)) {
+    const current = nextProblems[problemIndex];
+    const chapter = chapterMap.get(current.chapterId);
+    if (!chapter) {
+      continue;
+    }
+    for (let attempts = 0; attempts < 200; attempts += 1) {
+      const replacement = withDifficultyScore(
+        chapter,
+        generateFromChapter(
+          chapter,
+          random,
+          config.layoutMode,
+          config.answerMode,
+          config.difficultyFactor,
+          false,
+        ),
+      );
+      if (replacement.operator === "÷" && isRemainderDivisionProblem(replacement)) {
+        continue;
+      }
+      nextProblems[problemIndex] = {
+        ...replacement,
+        id: `${replacement.id}-balanced-${problemIndex}-${attempts}`,
+      };
+      break;
+    }
+  }
+
+  return nextProblems;
+};
+
+const distributeProblemsByPredicate = (
+  problems: StandardProblem[],
+  predicate: (problem: StandardProblem) => boolean,
+) => {
+  const picked = problems.filter(predicate);
+  if (picked.length <= 1 || picked.length >= problems.length) {
+    return problems;
+  }
+
+  const others = problems.filter((problem) => !predicate(problem));
+  const distributed = Array<StandardProblem | undefined>(problems.length).fill(
+    undefined,
+  );
+
+  for (let index = 0; index < picked.length; index += 1) {
+    let slot = Math.floor(((index + 0.5) * problems.length) / picked.length);
+    slot = Math.min(problems.length - 1, Math.max(0, slot));
+    while (distributed[slot]) {
+      slot = Math.min(problems.length - 1, slot + 1);
+      if (!distributed[slot]) {
+        break;
+      }
+      slot = Math.max(0, slot - 2);
+    }
+    distributed[slot] = picked[index];
+  }
+
+  let otherCursor = 0;
+  for (let index = 0; index < distributed.length; index += 1) {
+    if (!distributed[index]) {
+      distributed[index] = others[otherCursor];
+      otherCursor += 1;
+    }
+  }
+
+  return distributed.filter((item): item is StandardProblem => Boolean(item));
 };
 
 export const buildWorksheetPages = (
@@ -1103,6 +1774,7 @@ export const buildWorksheetPages = (
     config.chapterIds,
   );
   const random = new Random(config.seed);
+  const difficultyScores = sampleDifficultyScores(config, selectedChapters);
   const problems: StandardProblem[] = [];
   const seen = new Set<string>();
   const chapterTitle =
@@ -1115,40 +1787,71 @@ export const buildWorksheetPages = (
   ) {
     attempts += 1;
     const selected = random.pick(selectedChapters);
-    const chapter = random.pick(chapterPoolFor(selected));
+    const chapter = random.pick(
+      chapterPoolForDifficulty(selected, config.difficultyFactor),
+    );
     const problem = generateFromChapter(
       chapter,
       random,
       config.layoutMode,
       config.answerMode,
+      config.difficultyFactor,
+      config.allowRemainderDivision,
     );
-    const signature = `${chapter.value}-${problem.expression}-${problem.answer}`;
+    const scoredProblem = withDifficultyScore(chapter, problem);
+    if (
+      !matchesDifficulty(
+        scoredProblem.difficultyScore ?? 0,
+        difficultyScores,
+        config.difficultyFactor,
+      )
+    ) {
+      continue;
+    }
+    const signature = `${chapter.value}-${scoredProblem.expression}-${scoredProblem.answer}`;
     if (seen.has(signature)) {
       continue;
     }
     seen.add(signature);
-    problems.push(problem);
+    problems.push(scoredProblem);
   }
 
-  while (problems.length < config.totalCount) {
+  while (problems.length < config.totalCount && attempts < config.totalCount * 200) {
+    attempts += 1;
     const selected = random.pick(selectedChapters);
-    const chapter = random.pick(chapterPoolFor(selected));
-    problems.push(
+    const chapter = random.pick(
+      chapterPoolForDifficulty(selected, config.difficultyFactor),
+    );
+    const scoredProblem = withDifficultyScore(
+      chapter,
       generateFromChapter(
         chapter,
         random,
         config.layoutMode,
         config.answerMode,
+        config.difficultyFactor,
+        config.allowRemainderDivision,
       ),
     );
+    problems.push(scoredProblem);
   }
 
+  const balancedProblems = rebalanceRemainderDivisionProblems(
+    problems,
+    config,
+    random,
+  );
+  const distributedProblems = distributeProblemsByPredicate(
+    balancedProblems,
+    isRemainderDivisionProblem,
+  );
+
   const pages: WorksheetPage[] = [];
-  for (let index = 0; index < problems.length; index += config.pageSize) {
+  for (let index = 0; index < distributedProblems.length; index += config.pageSize) {
     pages.push({
       index: pages.length + 1,
       title: chapterTitle,
-      problems: problems.slice(index, index + config.pageSize),
+      problems: distributedProblems.slice(index, index + config.pageSize),
     });
   }
   return pages;

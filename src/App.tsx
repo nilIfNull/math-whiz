@@ -21,6 +21,8 @@ const layoutDefaults = {
 const defaultConfig: WorksheetConfig = {
   grade: 1,
   chapterIds: [200],
+  difficultyFactor: 50,
+  allowRemainderDivision: false,
   layoutMode: "horizontal",
   answerMode: "oral",
   totalCount: 120,
@@ -36,6 +38,14 @@ const clamp = (value: number, min: number, max: number) =>
 const readInt = (value: string, fallback: number) => {
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const difficultyLabel = (value: number) => {
+  if (value <= 25) return "基础";
+  if (value <= 45) return "偏易";
+  if (value <= 55) return "标准";
+  if (value <= 75) return "偏难";
+  return "提升";
 };
 
 function App() {
@@ -88,8 +98,9 @@ function App() {
 
   const normalizedPageSize = clamp(config.pageSize, 1, 120);
   const normalizedColumns = clamp(config.columns, 1, 6);
+  const normalizedDifficulty = clamp(config.difficultyFactor, 0, 100);
 
-  const statusText = `${pages.length} 页 / ${config.totalCount} 题 / 每页 ${normalizedPageSize} 题`;
+  const statusText = `${pages.length} 页 / ${config.totalCount} 题 / 每页 ${normalizedPageSize} 题 / ${difficultyLabel(normalizedDifficulty)} ${normalizedDifficulty}`;
 
   return (
     <div className="app-shell">
@@ -156,22 +167,28 @@ function App() {
         <section className="control-group two-column">
           <div>
             <h2>排版</h2>
-            <div className="segmented">
+            <div className="switch-tabs" role="tablist" aria-label="排版方式">
               <button
                 type="button"
                 className={
-                  config.layoutMode === "horizontal" ? "chip active" : "chip"
+                  config.layoutMode === "horizontal"
+                    ? "switch-tab active"
+                    : "switch-tab"
                 }
                 onClick={() => onLayoutChange("horizontal")}
+                aria-pressed={config.layoutMode === "horizontal"}
               >
                 横式
               </button>
               <button
                 type="button"
                 className={
-                  config.layoutMode === "vertical" ? "chip active" : "chip"
+                  config.layoutMode === "vertical"
+                    ? "switch-tab active"
+                    : "switch-tab"
                 }
                 onClick={() => onLayoutChange("vertical")}
+                aria-pressed={config.layoutMode === "vertical"}
               >
                 竖式
               </button>
@@ -179,26 +196,112 @@ function App() {
           </div>
           <div>
             <h2>答题方式</h2>
-            <div className="segmented">
+            <div className="switch-tabs" role="tablist" aria-label="答题方式">
               <button
                 type="button"
                 className={
-                  config.answerMode === "oral" ? "chip active" : "chip"
+                  config.answerMode === "oral"
+                    ? "switch-tab active"
+                    : "switch-tab"
                 }
                 onClick={() => updateConfig("answerMode", "oral")}
+                aria-pressed={config.answerMode === "oral"}
               >
                 口算
               </button>
               <button
                 type="button"
                 className={
-                  config.answerMode === "blank" ? "chip active" : "chip"
+                  config.answerMode === "blank"
+                    ? "switch-tab active"
+                    : "switch-tab"
                 }
                 onClick={() => updateConfig("answerMode", "blank")}
+                aria-pressed={config.answerMode === "blank"}
               >
                 填空
               </button>
             </div>
+          </div>
+        </section>
+
+        <section className="control-group">
+          <div className="group-title-row">
+            <h2>难度系数</h2>
+            <span className="hint">
+              {difficultyLabel(normalizedDifficulty)} {normalizedDifficulty}
+            </span>
+          </div>
+          <label className="difficulty-panel">
+            <input
+              className="difficulty-slider"
+              type="range"
+              min={0}
+              max={100}
+              step={1}
+              value={normalizedDifficulty}
+              onChange={(event) =>
+                updateConfig(
+                  "difficultyFactor",
+                  clamp(readInt(event.target.value, 50), 0, 100),
+                )
+              }
+              aria-label="难度系数"
+            />
+            <div className="difficulty-scale" aria-hidden="true">
+              <span>更基础</span>
+              <span>标准</span>
+              <span>更提升</span>
+            </div>
+          </label>
+        </section>
+
+        <section className="control-group">
+          <div className="group-title-row">
+            <h2>辅助选项</h2>
+            <span className="hint">按需开启</span>
+          </div>
+          <div className="setting-list">
+            <label
+              className={
+                config.allowRemainderDivision
+                  ? "setting-card active"
+                  : "setting-card"
+              }
+            >
+              <span className="setting-copy">
+                <strong>允许余数除法</strong>
+                <small>打开后，除法题可按难度逐步出现余数题。</small>
+              </span>
+              <span className="setting-control">
+                <input
+                  type="checkbox"
+                  checked={config.allowRemainderDivision}
+                  onChange={(event) =>
+                    updateConfig("allowRemainderDivision", event.target.checked)
+                  }
+                />
+                <span className="setting-switch" aria-hidden="true" />
+              </span>
+            </label>
+            <label
+              className={config.showAnswers ? "setting-card active" : "setting-card"}
+            >
+              <span className="setting-copy">
+                <strong>显示答案</strong>
+                <small>预览答案与难度数据条，便于检查出题效果。</small>
+              </span>
+              <span className="setting-control">
+                <input
+                  type="checkbox"
+                  checked={config.showAnswers}
+                  onChange={(event) =>
+                    updateConfig("showAnswers", event.target.checked)
+                  }
+                />
+                <span className="setting-switch" aria-hidden="true" />
+              </span>
+            </label>
           </div>
         </section>
 
@@ -208,12 +311,12 @@ function App() {
             <input
               type="number"
               min={1}
-              max={240}
+              max={2160}
               value={config.totalCount}
               onChange={(event) =>
                 updateConfig(
                   "totalCount",
-                  clamp(readInt(event.target.value, 40), 1, 240),
+                  clamp(readInt(event.target.value, 40), 1, 2160),
                 )
               }
             />
@@ -265,16 +368,6 @@ function App() {
         </section>
 
         <section className="control-group">
-          <label className="toggle-row">
-            <input
-              type="checkbox"
-              checked={config.showAnswers}
-              onChange={(event) =>
-                updateConfig("showAnswers", event.target.checked)
-              }
-            />
-            <span>显示答案</span>
-          </label>
           <div className="action-row">
             <button
               type="button"
@@ -469,14 +562,79 @@ function ProblemCard({
     layoutMode === "vertical" &&
     problem.isVerticalNative &&
     (problem.verticalRows?.length ?? 0) >= 2;
+  const renderAsDivision =
+    renderAsVertical && problem.operator === "÷" && Boolean(problem.left);
+  const difficultyFill =
+    showAnswers && problem.difficultyScore !== undefined
+      ? `${Math.min(100, Math.max(0, (problem.difficultyScore / 18) * 100))}%`
+      : "0%";
+  const difficultyTitle =
+    showAnswers && problem.difficultyScore !== undefined
+      ? `难度 ${problem.difficultyScore.toFixed(1)}`
+      : undefined;
+
+  const renderDivisionOperand = (target: "left" | "right") => {
+    const value = target === "left" ? problem.left : problem.right;
+    const isBlank =
+      problem.answerMode === "blank" && problem.blankTarget === target;
+    if (!isBlank) {
+      return value ? (
+        <MathText text={value} />
+      ) : (
+        <span className="blank-slot" />
+      );
+    }
+    if (showAnswers) {
+      return <MathText text={problem.answer} />;
+    }
+    return <span className="blank-slot" />;
+  };
+
+  const renderDivisionAnswer = () => {
+    const resultBlank =
+      problem.answerMode === "oral" || problem.blankTarget === "result";
+    if (resultBlank) {
+      return showAnswers ? (
+        <span className="filled-answer">
+          <MathText text={problem.answer} />
+        </span>
+      ) : (
+        <span className="blank-slot result-slot" />
+      );
+    }
+    return problem.verticalAnswer ? (
+      <MathText text={problem.verticalAnswer} />
+    ) : (
+      <span className="filled-answer">
+        <MathText text={problem.answer} />
+      </span>
+    );
+  };
 
   return (
     <article
-      className={
-        renderAsVertical ? "problem-card vertical" : "problem-card horizontal"
+      className={`${renderAsVertical ? "problem-card vertical" : "problem-card horizontal"}${showAnswers && problem.difficultyScore !== undefined ? " with-difficulty-bar" : ""}`}
+      title={difficultyTitle}
+      style={
+        {
+          "--difficulty-fill": difficultyFill,
+        } as React.CSSProperties
       }
     >
-      {renderAsVertical ? (
+      {renderAsDivision ? (
+        <div className="division-problem">
+          <div className="division-answer">{renderDivisionAnswer()}</div>
+          <div className="division-body">
+            <span className="division-divisor">
+              {renderDivisionOperand("right")}
+            </span>
+            <span className="division-bracket" aria-hidden="true" />
+            <span className="division-dividend">
+              {renderDivisionOperand("left")}
+            </span>
+          </div>
+        </div>
+      ) : renderAsVertical ? (
         <div className="vertical-problem">
           {problem.verticalRows?.map((row, rowIndex) => (
             <div
